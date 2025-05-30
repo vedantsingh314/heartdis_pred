@@ -1,151 +1,64 @@
 import streamlit as st
 import pandas as pd
-import math
-from pathlib import Path
+import pickle
 
-# Set the title and favicon that appear in the Browser's tab bar.
-st.set_page_config(
-    page_title='GDP dashboard',
-    page_icon=':earth_americas:', # This is an emoji shortcode. Could be a URL too.
-)
+st.set_page_config(page_title="Heart Disease Predictor", layout="centered")
 
-# -----------------------------------------------------------------------------
-# Declare some useful functions.
+st.title("💓 Heart Disease Prediction App")
+st.markdown("Get a quick prediction of heart disease risk based on your health indicators.")
 
-@st.cache_data
-def get_gdp_data():
-    """Grab GDP data from a CSV file.
+# Sidebar Input Form
+st.sidebar.header("📝 Input Patient Details")
 
-    This uses caching to avoid having to read the file every time. If we were
-    reading from an HTTP endpoint instead of a file, it's a good idea to set
-    a maximum age to the cache with the TTL argument: @st.cache_data(ttl='1d')
-    """
+age = st.sidebar.number_input("Age", min_value=1, max_value=120, value=50)
+sex = st.sidebar.radio("Sex", ["Female", "Male"])
+cp = st.sidebar.selectbox("Chest Pain Type (cp)", [0, 1, 2, 3])
+trestbps = st.sidebar.slider("Resting Blood Pressure", 80, 200, 120)
+chol = st.sidebar.slider("Serum Cholesterol (mg/dl)", 100, 600, 200)
+fbs = st.sidebar.radio("Fasting Blood Sugar > 120 mg/dl (fbs)", [0, 1])
+restecg = st.sidebar.selectbox("Resting ECG", [0, 1, 2])
+thalach = st.sidebar.slider("Max Heart Rate Achieved", 60, 250, 150)
+exang = st.sidebar.radio("Exercise-Induced Angina (exang)", [0, 1])
+oldpeak = st.sidebar.slider("ST Depression (oldpeak)", 0.0, 6.0, 1.0, step=0.1)
+slope = st.sidebar.selectbox("Slope of ST segment", [0, 1, 2])
+ca = st.sidebar.selectbox("Number of Major Vessels (ca)", [0, 1, 2, 3, 4])
+thal = st.sidebar.selectbox("Thalassemia (thal)", [1, 2, 3])
 
-    # Instead of a CSV on disk, you could read from an HTTP endpoint here too.
-    DATA_FILENAME = Path(__file__).parent/'data/gdp_data.csv'
-    raw_gdp_df = pd.read_csv(DATA_FILENAME)
+# Prepare input as DataFrame
+input_df = pd.DataFrame([{
+    'age': age,
+    'sex': 1 if sex == "Male" else 0,
+    'cp': cp,
+    'trestbps': trestbps,
+    'chol': chol,
+    'fbs': fbs,
+    'restecg': restecg,
+    'thalach': thalach,
+    'exang': exang,
+    'oldpeak': oldpeak,
+    'slope': slope,
+    'ca': ca,
+    'thal': thal
+}])
 
-    MIN_YEAR = 1960
-    MAX_YEAR = 2022
+# Load models
+with open('logreg_pipeline.pkl', 'rb') as f:
+    model1 = pickle.load(f)
 
-    # The data above has columns like:
-    # - Country Name
-    # - Country Code
-    # - [Stuff I don't care about]
-    # - GDP for 1960
-    # - GDP for 1961
-    # - GDP for 1962
-    # - ...
-    # - GDP for 2022
-    #
-    # ...but I want this instead:
-    # - Country Name
-    # - Country Code
-    # - Year
-    # - GDP
-    #
-    # So let's pivot all those year-columns into two: Year and GDP
-    gdp_df = raw_gdp_df.melt(
-        ['Country Code'],
-        [str(x) for x in range(MIN_YEAR, MAX_YEAR + 1)],
-        'Year',
-        'GDP',
-    )
+with open('knn_pipeline.pkl', 'rb') as f:
+    model2 = pickle.load(f)
 
-    # Convert years from string to integers
-    gdp_df['Year'] = pd.to_numeric(gdp_df['Year'])
+# Predict
+pred1 = model1.predict_proba(input_df)[0][1]
+pred2 = model2.predict_proba(input_df)[0][1]
+final_pred = (pred1 + pred2) / 2
 
-    return gdp_df
+# Display prediction
+st.subheader("🧠 Prediction Result")
+st.metric(label="Heart Disease Risk", value=f"{final_pred:.2%}", delta="🚨 High" if final_pred >= 0.5 else "✅ Low")
+st.progress(final_pred)
 
-gdp_df = get_gdp_data()
-
-# -----------------------------------------------------------------------------
-# Draw the actual page
-
-# Set the title that appears at the top of the page.
-'''
-# :earth_americas: GDP dashboard
-
-Browse GDP data from the [World Bank Open Data](https://data.worldbank.org/) website. As you'll
-notice, the data only goes to 2022 right now, and datapoints for certain years are often missing.
-But it's otherwise a great (and did I mention _free_?) source of data.
-'''
-
-# Add some spacing
-''
-''
-
-min_value = gdp_df['Year'].min()
-max_value = gdp_df['Year'].max()
-
-from_year, to_year = st.slider(
-    'Which years are you interested in?',
-    min_value=min_value,
-    max_value=max_value,
-    value=[min_value, max_value])
-
-countries = gdp_df['Country Code'].unique()
-
-if not len(countries):
-    st.warning("Select at least one country")
-
-selected_countries = st.multiselect(
-    'Which countries would you like to view?',
-    countries,
-    ['DEU', 'FRA', 'GBR', 'BRA', 'MEX', 'JPN'])
-
-''
-''
-''
-
-# Filter the data
-filtered_gdp_df = gdp_df[
-    (gdp_df['Country Code'].isin(selected_countries))
-    & (gdp_df['Year'] <= to_year)
-    & (from_year <= gdp_df['Year'])
-]
-
-st.header('GDP over time', divider='gray')
-
-''
-
-st.line_chart(
-    filtered_gdp_df,
-    x='Year',
-    y='GDP',
-    color='Country Code',
-)
-
-''
-''
-
-
-first_year = gdp_df[gdp_df['Year'] == from_year]
-last_year = gdp_df[gdp_df['Year'] == to_year]
-
-st.header(f'GDP in {to_year}', divider='gray')
-
-''
-
-cols = st.columns(4)
-
-for i, country in enumerate(selected_countries):
-    col = cols[i % len(cols)]
-
-    with col:
-        first_gdp = first_year[first_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-        last_gdp = last_year[last_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-
-        if math.isnan(first_gdp):
-            growth = 'n/a'
-            delta_color = 'off'
-        else:
-            growth = f'{last_gdp / first_gdp:,.2f}x'
-            delta_color = 'normal'
-
-        st.metric(
-            label=f'{country} GDP',
-            value=f'{last_gdp:,.0f}B',
-            delta=growth,
-            delta_color=delta_color
-        )
+if final_pred >= 0.5:
+    st.warning("⚠️ The patient is at **high risk** of heart disease. Recommend immediate medical consultation.")
+else:
+    st.success("✅ The patient is at **low risk** of heart disease.")
