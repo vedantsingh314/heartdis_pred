@@ -1,6 +1,4 @@
-# :earth_americas: GDP dashboard template
-
-A simple Streamlit app showing the GDP of different countries in the world.
+This project uses machine learning to predict the risk of heart disease based on medical data such as age, blood pressure, cholesterol, and ECG results. It helps in early detection by analyzing patterns using models like Logistic Regression and KNN.
 
 [![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://gdp-dashboard-template.streamlit.app/)
 
